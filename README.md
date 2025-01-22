@@ -3,6 +3,8 @@
 # CoreDNS Analyzer
 A tool to analyze and visualize DNS communication patterns in Kubernetes clusters by monitoring CoreDNS logs. Built with Rust and Vue.js.
 
+<img src="img/screenshot.png" width="500" style="border-radius:2%;">
+
 ## Features
 
 - Real-time monitoring of CoreDNS pod logs

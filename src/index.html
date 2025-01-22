@@ -19,6 +19,7 @@
 <body>
     <div id="app">
         <div class="flex flex-col items-center justify-center mt-8">
+            <h2 class="text-2xl font-semibold mt-4 mb-4">CoreDNS Analyzer</h2>
             <!-- Filter Controls -->
             <div class="w-full max-w-4xl mb-8 p-4 bg-gray-100 rounded-lg">
                 <div class="flex space-x-4">
@@ -181,9 +182,6 @@
             });
 
             const option = {
-                title: {
-                    text: 'DNS Communication Graph'
-                },
                 tooltip: {},
                 legend: [{
                     data: categories.map(a => a.name)
