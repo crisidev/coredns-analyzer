@@ -6,12 +6,13 @@
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio,line-clamp,container-queries"></script>
+    <script
+        src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio,line-clamp,container-queries"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.4.2/echarts.min.js"></script>
     <style>
         #dnsChart {
-            width: 1600px;
-            height: 800px;
+            width: 900px;
+            height: 600px;
         }
     </style>
 </head>
@@ -20,7 +21,6 @@
     <div id="app">
         <div class="flex flex-col items-center justify-center mt-8">
             <h2 class="text-2xl font-semibold mt-4 mb-4">CoreDNS Analyzer</h2>
-            <!-- Filter Controls -->
             <div class="w-full max-w-4xl mb-8 p-4 bg-gray-100 rounded-lg">
                 <div class="flex space-x-4">
                     <div class="flex-1">
@@ -34,24 +34,27 @@
                         <label class="block text-sm font-medium text-gray-700 mb-2">Filter by Service/Domain</label>
                         <select v-model="selectedService" class="w-full rounded-md border-gray-300">
                             <option value="">All Services/Domains</option>
-                            <option v-for="service in allServices" :key="service" :value="service">{{ service }}</option>
+                            <option v-for="service in allServices" :key="service" :value="service">{{ service }}
+                            </option>
                         </select>
                     </div>
                 </div>
-                <div class="mt-4 flex justify-end">
+                <div class="mt-4 flex justify-end space-x-2">
                     <button @click="clearFilters" class="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300">
                         Clear Filters
                     </button>
+                    <button @click="clearSelection" class="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300">
+                        Clear Selection
+                    </button>
                 </div>
             </div>
-            <div id="dnsChart"></div>
+            <div id="dnsChart" class="border-2 rounded-lg"></div>
         </div>
     </div>
 
-    <script lang="ts">
+    <script>
         const { ref, computed, createApp } = Vue
 
-        // Define all utility functions first
         function new_ws_conn() {
             console.log("Creating new websocket connection!")
             let url = new URL("/ws/v1/get_updates", window.location.href);
@@ -59,180 +62,216 @@
             return new WebSocket(url.href);
         }
 
-        function extractUniquePods(data) {
-            const pods = new Set();
-            [...Object.values(data.internal), ...Object.values(data.external)]
-                .flat()
-                .forEach(pod => pods.add(pod));
-            return Array.from(pods);
-        }
-
-        function extractAllServices(data) {
-            return [...Object.keys(data.internal), ...Object.keys(data.external)];
-        }
-
-        function filterData(data, selectedPod, selectedService) {
-            const filtered = {
-                internal: {},
-                external: {}
-            };
-
-            const filterSection = (section, target) => {
-                Object.entries(section).forEach(([service, pods]) => {
-                    if (selectedService && service !== selectedService) return;
-                    if (selectedPod && !pods.includes(selectedPod)) return;
-                    
-                    if (selectedPod) {
-                        target[service] = [selectedPod];
-                    } else {
-                        target[service] = pods;
-                    }
-                });
-            };
-
-            filterSection(data.internal, filtered.internal);
-            filterSection(data.external, filtered.external);
-
-            return filtered;
-        }
-
-        function updateChart(data) {
-            const chart = echarts.init(document.getElementById('dnsChart'));
-            const nodes = [];
-            const edges = [];
-            const categories = [
-                { name: 'Internal Services' },
-                { name: 'External Domains' },
-                { name: 'Pods' }
-            ];
-            let nodeIndex = 0;
-            const nodeMap = new Map();
-
-            // Add internal services
-            Object.keys(data.internal).forEach((service) => {
-                nodes.push({
-                    id: nodeIndex,
-                    name: service,
-                    symbolSize: 60,
-                    category: 0,
-                    label: {
-                        show: true,
-                        fontSize: 14,
-                        fontWeight: 'bold'
-                    }
-                });
-                nodeMap.set(service, nodeIndex);
-                nodeIndex++;
-            });
-
-            // Add external domains
-            Object.keys(data.external).forEach((domain) => {
-                nodes.push({
-                    id: nodeIndex,
-                    name: domain,
-                    symbolSize: 60,
-                    category: 1,
-                    label: {
-                        show: true,
-                        fontSize: 14,
-                        fontWeight: 'bold'
-                    }
-                });
-                nodeMap.set(domain, nodeIndex);
-                nodeIndex++;
-            });
-
-            function addPodNodes(pods, targetNodeId) {
-                pods.forEach(pod => {
-                    let podNodeId;
-                    if (!nodeMap.has(pod)) {
-                        podNodeId = nodeIndex;
-                        nodes.push({
-                            id: podNodeId,
-                            name: pod,
-                            symbolSize: 40,
-                            category: 2,
-                            label: {
-                                show: true,
-                                fontSize: 12
-                            }
-                        });
-                        nodeMap.set(pod, podNodeId);
-                        nodeIndex++;
-                    } else {
-                        podNodeId = nodeMap.get(pod);
-                    }
-                    edges.push({
-                        source: podNodeId,
-                        target: targetNodeId
-                    });
-                });
-            }
-
-            // Process internal service connections
-            Object.entries(data.internal).forEach(([service, pods]) => {
-                const serviceNodeId = nodeMap.get(service);
-                addPodNodes(pods, serviceNodeId);
-            });
-
-            // Process external domain connections
-            Object.entries(data.external).forEach(([domain, pods]) => {
-                const domainNodeId = nodeMap.get(domain);
-                addPodNodes(pods, domainNodeId);
-            });
-
-            const option = {
-                tooltip: {},
-                legend: [{
-                    data: categories.map(a => a.name)
-                }],
-                animationDurationUpdate: 1500,
-                animationEasingUpdate: 'quinticInOut',
-                series: [{
-                    type: 'graph',
-                    layout: 'force',
-                    data: nodes,
-                    links: edges,
-                    categories: categories,
-                    roam: true,
-                    label: {
-                        show: true,
-                        position: 'inside',
-                        formatter: '{b}',
-                        fontSize: 12,
-                        color: '#333'
-                    },
-                    lineStyle: {
-                        color: 'source',
-                        curveness: 0.3
-                    },
-                    emphasis: {
-                        focus: 'adjacency',
-                        lineStyle: {
-                            width: 10
-                        }
-                    },
-                    force: {
-                        repulsion: 400,
-                        edgeLength: 200,
-                        gravity: 0.2
-                    }
-                }]
-            };
-            chart.setOption(option);
-        }
-
         createApp({
             setup() {
                 const rawData = ref(null);
                 const selectedPod = ref('');
                 const selectedService = ref('');
+                const selectedNode = ref('');
 
-                const uniquePods = computed(() => 
+                function extractUniquePods(data) {
+                    const pods = new Set();
+                    [...Object.values(data.internal), ...Object.values(data.external)]
+                        .flat()
+                        .forEach(pod => pods.add(pod));
+                    return Array.from(pods);
+                }
+
+                function extractAllServices(data) {
+                    return [...Object.keys(data.internal), ...Object.keys(data.external)];
+                }
+
+                function filterData(data, selectedPod, selectedService) {
+                    const filtered = {
+                        internal: {},
+                        external: {}
+                    };
+
+                    const filterSection = (section, target) => {
+                        Object.entries(section).forEach(([service, pods]) => {
+                            if (selectedService && service !== selectedService) return;
+                            if (selectedPod && !pods.includes(selectedPod)) return;
+
+                            if (selectedPod) {
+                                target[service] = [selectedPod];
+                            } else {
+                                target[service] = pods;
+                            }
+                        });
+                    };
+
+                    filterSection(data.internal, filtered.internal);
+                    filterSection(data.external, filtered.external);
+
+                    return filtered;
+                }
+
+                function filterNodeConnections(data, nodeName) {
+                    const filtered = {
+                        internal: {},
+                        external: {}
+                    };
+
+                    if (data.internal[nodeName] || data.external[nodeName]) {
+                        filtered.internal[nodeName] = data.internal[nodeName] || [];
+                        filtered.external[nodeName] = data.external[nodeName] || [];
+                    } else {
+                        Object.entries(data.internal).forEach(([service, pods]) => {
+                            if (pods.includes(nodeName)) {
+                                filtered.internal[service] = [nodeName];
+                            }
+                        });
+                        Object.entries(data.external).forEach(([domain, pods]) => {
+                            if (pods.includes(nodeName)) {
+                                filtered.external[domain] = [nodeName];
+                            }
+                        });
+                    }
+                    return filtered;
+                }
+
+                function createChart(data) {
+                    const chart = echarts.init(document.getElementById('dnsChart'));
+                    const nodes = [];
+                    const edges = [];
+                    const categories = [
+                        { name: 'Internal Services' },
+                        { name: 'External Domains' },
+                        { name: 'Pods' }
+                    ];
+                    let nodeIndex = 0;
+                    const nodeMap = new Map();
+
+                    Object.keys(data.internal).forEach((service) => {
+                        nodes.push({
+                            id: nodeIndex,
+                            name: service,
+                            symbolSize: 60,
+                            category: 0,
+                            label: {
+                                show: true,
+                                fontSize: 14,
+                                fontWeight: 'bold'
+                            }
+                        });
+                        nodeMap.set(service, nodeIndex);
+                        nodeIndex++;
+                    });
+
+                    Object.keys(data.external).forEach((domain) => {
+                        nodes.push({
+                            id: nodeIndex,
+                            name: domain,
+                            symbolSize: 60,
+                            category: 1,
+                            label: {
+                                show: true,
+                                fontSize: 14,
+                                fontWeight: 'bold'
+                            }
+                        });
+                        nodeMap.set(domain, nodeIndex);
+                        nodeIndex++;
+                    });
+
+                    function addPodNodes(pods, targetNodeId) {
+                        pods.forEach(pod => {
+                            let podNodeId;
+                            if (!nodeMap.has(pod)) {
+                                podNodeId = nodeIndex;
+                                nodes.push({
+                                    id: podNodeId,
+                                    name: pod,
+                                    symbolSize: 40,
+                                    category: 2,
+                                    label: {
+                                        show: true,
+                                        fontSize: 12
+                                    }
+                                });
+                                nodeMap.set(pod, podNodeId);
+                                nodeIndex++;
+                            } else {
+                                podNodeId = nodeMap.get(pod);
+                            }
+                            edges.push({
+                                source: podNodeId,
+                                target: targetNodeId
+                            });
+                        });
+                    }
+
+                    Object.entries(data.internal).forEach(([service, pods]) => {
+                        const serviceNodeId = nodeMap.get(service);
+                        addPodNodes(pods, serviceNodeId);
+                    });
+
+                    Object.entries(data.external).forEach(([domain, pods]) => {
+                        const domainNodeId = nodeMap.get(domain);
+                        addPodNodes(pods, domainNodeId);
+                    });
+
+                    const option = {
+                        tooltip: {},
+                        legend: [{
+                            data: categories.map(a => a.name),
+                            top: 50,
+                        }],
+                        animationDurationUpdate: 1500,
+                        animationEasingUpdate: 'quinticInOut',
+                        series: [{
+                            type: 'graph',
+                            layout: 'force',
+                            data: nodes,
+                            links: edges,
+                            categories: categories,
+                            roam: true,
+                            label: {
+                                show: true,
+                                position: 'inside',
+                                formatter: '{b}',
+                                fontSize: 12,
+                                color: '#333'
+                            },
+                            lineStyle: {
+                                color: 'source',
+                                curveness: 0.3,
+                                type: 'solid',
+                            },
+                            edgeSymbol: ['none', 'arrow'],
+                            edgeSymbolSize: [0, 10],
+                            emphasis: {
+                                focus: 'adjacency',
+                                lineStyle: {
+                                    width: 3
+                                }
+                            },
+                            force: {
+                                repulsion: 400,
+                                edgeLength: 200,
+                                gravity: 0.2
+                            },
+                        }]
+                    };
+                    chart.setOption(option);
+                    chart.on('click', params => {
+                        if (params.dataType === 'node') {
+                            if (params.data.category === 2) { // Pod
+                                selectedPod.value = params.data.name;
+                                selectedService.value = '';
+                            } else { // Service/Domain
+                                selectedService.value = params.data.name;
+                                selectedPod.value = '';
+                            }
+                        }
+                    });
+                }
+
+                const uniquePods = computed(() =>
                     rawData.value ? extractUniquePods(rawData.value) : []
                 );
 
-                const allServices = computed(() => 
+                const allServices = computed(() =>
                     rawData.value ? extractAllServices(rawData.value) : []
                 );
 
@@ -240,7 +279,14 @@
                     selectedPod.value = '';
                     selectedService.value = '';
                     if (rawData.value) {
-                        updateChart(rawData.value);
+                        createChart(rawData.value);
+                    }
+                };
+
+                const clearSelection = () => {
+                    selectedNode.value = '';
+                    if (rawData.value) {
+                        createChart(rawData.value);
                     }
                 };
 
@@ -259,7 +305,7 @@
                     const data = JSON.parse(ev.data);
                     rawData.value = data;
                     const filteredData = filterData(data, selectedPod.value, selectedService.value);
-                    updateChart(filteredData);
+                    createChart(filteredData);
                 };
 
                 return {
@@ -267,7 +313,8 @@
                     selectedService,
                     uniquePods,
                     allServices,
-                    clearFilters
+                    clearFilters,
+                    clearSelection
                 }
             }
         }).mount('#app')

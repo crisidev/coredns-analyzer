@@ -13,6 +13,7 @@ use axum::{
 };
 use config::CONFIG;
 use log_analyzer::LogAnalyzer;
+mod tlds;
 
 #[tokio::main]
 async fn main() -> Result<()> {
