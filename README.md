@@ -67,7 +67,9 @@ data:
 kubectl apply -f coredns-cm.yaml
 ````
 
-4. Start the analyzer and open the web interface (default port 8080) to see a real-time graph of DNS communication patterns in your cluster. Filter by specific pods or services to focus on particular communication paths.
+4. Kill CoreDNS pod to force config reload
+
+5. Start the analyzer and open the web interface (default port 8080) to see a real-time graph of DNS communication patterns in your cluster. Filter by specific pods or services to focus on particular communication paths.
 
 ```bash
 cargo run
