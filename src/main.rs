@@ -14,26 +14,28 @@ use axum::{
 use config::CONFIG;
 use log_analyzer::LogAnalyzer;
 mod tlds;
+mod tui;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    env_logger::init();
-    let analyzer = LogAnalyzer::new().await?;
-    let _ = analyzer.analyze_loop().await;
-
-    let app = Router::new()
-        .route("/", get(root_get))
-        .route("/ws/v1/get_updates", get(get_updates))
-        .with_state(analyzer);
-
-    log::info!(
-        "Starting Webserver on port: {}:{}",
-        CONFIG.server_addr, CONFIG.server_port
-    );
-    let listener =
-        tokio::net::TcpListener::bind(format!("{}:{}", CONFIG.server_addr, CONFIG.server_port))
-            .await?;
-    axum::serve(listener, app).await?;
+    tui::test().await
+    // env_logger::init();
+    // let analyzer = LogAnalyzer::new().await?;
+    // let _ = analyzer.analyze_loop().await;
+    //
+    // let app = Router::new()
+    //     .route("/", get(root_get))
+    //     .route("/ws/v1/get_updates", get(get_updates))
+    //     .with_state(analyzer);
+    //
+    // log::info!(
+    //     "Starting Webserver on port: {}:{}",
+    //     CONFIG.server_addr, CONFIG.server_port
+    // );
+    // let listener =
+    //     tokio::net::TcpListener::bind(format!("{}:{}", CONFIG.server_addr, CONFIG.server_port))
+    //         .await?;
+    // axum::serve(listener, app).await?;
 
     Ok(())
 }

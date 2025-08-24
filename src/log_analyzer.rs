@@ -1,3 +1,5 @@
+use crate::config::CONFIG;
+use crate::tlds::TLDS;
 use anyhow::Result;
 use futures::{AsyncBufReadExt, TryStreamExt};
 use k8s_openapi::api::core::v1::Pod;
@@ -12,13 +14,11 @@ use std::{collections::HashMap, sync::Arc};
 use tokio::sync::watch::{Receiver, Sender};
 use tokio::sync::{watch, RwLock};
 use tokio::time::{sleep, Duration};
-use crate::tlds::TLDS;
-use crate::config::CONFIG;
 
-#[derive(Serialize)]
-struct DnsData {
-    internal: HashMap<String, Vec<String>>,
-    external: HashMap<String, Vec<String>>,
+#[derive(Serialize, Default, Debug, Clone)]
+pub struct DnsData {
+    pub(crate) internal: HashMap<String, Vec<String>>,
+    pub(crate) external: HashMap<String, Vec<String>>,
 }
 
 #[derive(Clone)]
@@ -45,16 +45,22 @@ impl LogAnalyzer {
 
     fn extract_domain_name(query_name: &str, response_code: &str) -> Option<(String, bool)> {
         let query = query_name.trim_end_matches('.');
-        
+
         if query.ends_with(".svc.cluster.local") && response_code == "NOERROR" {
-            Some((query.split('.').next().unwrap_or("unknown").to_string(), true))
-        } else if TLDS.iter().any(|tld| query.to_lowercase().ends_with(&format!(".{}", tld))) 
-               && response_code == "NOERROR" {
-            Some((query.to_string(), false))  
+            Some((
+                query.split('.').next().unwrap_or("unknown").to_string(),
+                true,
+            ))
+        } else if TLDS
+            .iter()
+            .any(|tld| query.to_lowercase().ends_with(&format!(".{}", tld)))
+            && response_code == "NOERROR"
+        {
+            Some((query.to_string(), false))
         } else {
             None
         }
-     }
+    }
 
     pub async fn analyze_loop(&self) -> Result<()> {
         let pods: Api<Pod> = Api::namespaced(self.client.clone(), &CONFIG.coredns_ns);
@@ -107,15 +113,22 @@ impl LogAnalyzer {
                 };
 
                 if let Some(captures) = re.captures(&line) {
-                    let (client_ip, _query_type, query_name, response_code) = match parse_infos(captures) {
-                        Some(res) => res,
-                        None => continue,
-                    };
-                 
-                    if let Some((domain_name, is_internal)) = Self::extract_domain_name(query_name, response_code) {
+                    let (client_ip, _query_type, query_name, response_code) =
+                        match parse_infos(captures) {
+                            Some(res) => res,
+                            None => continue,
+                        };
+
+                    if let Some((domain_name, is_internal)) =
+                        Self::extract_domain_name(query_name, response_code)
+                    {
                         let pod_name = resolve_pod(&client, client_ip).await;
-                        let map_to_update = if is_internal { &internal_clone } else { &external_clone };
-                        
+                        let map_to_update = if is_internal {
+                            &internal_clone
+                        } else {
+                            &external_clone
+                        };
+
                         map_to_update
                             .write()
                             .await
@@ -123,7 +136,7 @@ impl LogAnalyzer {
                             .or_insert_with(Vec::new)
                             .push(pod_name);
                     }
-                 }
+                }
             }
         });
 
